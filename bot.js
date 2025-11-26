@@ -6,7 +6,7 @@ const CONFIG = {
     PREFIX: './',
     GUILD_ID: process.env.GUILD_ID || 'YOUR_SERVER_ID',
     ORDER_CHANNEL_ID: process.env.ORDER_CHANNEL_ID || 'ORDER_CHANNEL_ID',
-    DISCORD_INVITE_LINK: 'https://discord.gg/SjefnHedt' // আপনার Discord invite link
+    DISCORD_INVITE_LINK: 'https://discord.gg/SjefnHedt'
 };
 
 const MESSAGES = {
@@ -80,17 +80,10 @@ async function processWebhookOrder(message) {
                     messageId: message.id,
                     channelId: message.channel.id,
                     timestamp: new Date(),
-                    originalEmbed: embed,
-                    commandMessageId: null // পরে store করবে
+                    originalEmbed: embed
                 });
                 
                 console.log(`📦 New order stored: ${orderId} for ${discordUsername}`);
-                
-                try {
-                    await message.channel.send(`📥 New order received: \`${orderId}\` for ${discordUsername}`);
-                } catch (notifyError) {
-                    console.log('Could not send notification message');
-                }
             }
         }
     } catch (error) {
@@ -151,10 +144,6 @@ async function handleApprovalCommand(message) {
     }
 
     try {
-        // Store command message ID for later deletion
-        orderInfo.commandMessageId = message.id;
-        pendingOrders.set(orderId, orderInfo);
-
         const user = await findUserByUsername(orderInfo.discordUsername);
         
         if (user) {
@@ -172,7 +161,7 @@ async function handleApprovalCommand(message) {
 
             await user.send({ embeds: [dmEmbed] });
             
-            // Update original webhook message
+            // Update original webhook message first
             try {
                 const channel = await client.channels.fetch(orderInfo.channelId);
                 const originalMessage = await channel.messages.fetch(orderInfo.messageId);
@@ -189,54 +178,36 @@ async function handleApprovalCommand(message) {
                     embeds: [approvedEmbed],
                     components: []
                 });
+
+                // 🔥 10 SECOND পরে WEBHOOK NOTIFICATION DELETE করবে
+                setTimeout(async () => {
+                    try {
+                        await originalMessage.delete();
+                        console.log(`🗑️ Webhook notification deleted for order: ${orderId}`);
+                    } catch (deleteError) {
+                        console.log('Could not delete webhook notification');
+                    }
+                }, 10000);
+
             } catch (editError) {
                 console.log('Original message edit failed, but order was approved');
             }
 
-            // Send success message and schedule deletion
-            const successMsg = await message.reply(`✅ Order \`${orderId}\` approved! DM sent to ${orderInfo.discordUsername}`);
+            // Bot এর message টি থাকবে (delete হবে না)
+            await message.reply(`✅ Order \`${orderId}\` approved! DM sent to ${orderInfo.discordUsername}`);
             
             // Remove from pending orders
             pendingOrders.delete(orderId);
             
             console.log(`✅ Order ${orderId} approved for ${orderInfo.discordUsername}`);
             
-            // Schedule message deletion after 10 seconds
-            setTimeout(async () => {
-                try {
-                    await message.delete();
-                    await successMsg.delete();
-                } catch (deleteError) {
-                    console.log('Could not delete approval messages');
-                }
-            }, 10000);
-            
         } else {
-            const errorMsg = await message.reply(`❌ User not found: ${orderInfo.discordUsername}`);
+            await message.reply(`❌ User not found: ${orderInfo.discordUsername}`);
             pendingOrders.delete(orderId);
-            
-            // Schedule deletion
-            setTimeout(async () => {
-                try {
-                    await message.delete();
-                    await errorMsg.delete();
-                } catch (deleteError) {
-                    console.log('Could not delete error messages');
-                }
-            }, 10000);
         }
     } catch (error) {
         console.error('Approval error:', error);
-        const errorMsg = await message.reply('❌ Error approving order.');
-        
-        setTimeout(async () => {
-            try {
-                await message.delete();
-                await errorMsg.delete();
-            } catch (deleteError) {
-                console.log('Could not delete error messages');
-            }
-        }, 10000);
+        await message.reply('❌ Error approving order.');
     }
 }
 
@@ -258,10 +229,6 @@ async function handleRejectionCommand(message) {
     }
 
     try {
-        // Store command message ID for later deletion
-        orderInfo.commandMessageId = message.id;
-        pendingOrders.set(orderId, orderInfo);
-
         const user = await findUserByUsername(orderInfo.discordUsername);
         
         if (user) {
@@ -280,7 +247,7 @@ async function handleRejectionCommand(message) {
 
             await user.send({ embeds: [dmEmbed] });
             
-            // Update original webhook message
+            // Update original webhook message first
             try {
                 const channel = await client.channels.fetch(orderInfo.channelId);
                 const originalMessage = await channel.messages.fetch(orderInfo.messageId);
@@ -298,54 +265,36 @@ async function handleRejectionCommand(message) {
                     embeds: [rejectedEmbed],
                     components: []
                 });
+
+                // 🔥 10 SECOND পরে WEBHOOK NOTIFICATION DELETE করবে
+                setTimeout(async () => {
+                    try {
+                        await originalMessage.delete();
+                        console.log(`🗑️ Webhook notification deleted for order: ${orderId}`);
+                    } catch (deleteError) {
+                        console.log('Could not delete webhook notification');
+                    }
+                }, 10000);
+
             } catch (editError) {
                 console.log('Original message edit failed, but order was rejected');
             }
 
-            // Send success message and schedule deletion
-            const successMsg = await message.reply(`❌ Order \`${orderId}\` rejected! DM sent to ${orderInfo.discordUsername}`);
+            // Bot এর message টি থাকবে (delete হবে না)
+            await message.reply(`❌ Order \`${orderId}\` rejected! DM sent to ${orderInfo.discordUsername}`);
             
             // Remove from pending orders
             pendingOrders.delete(orderId);
             
             console.log(`❌ Order ${orderId} rejected for ${orderInfo.discordUsername}`);
             
-            // Schedule message deletion after 10 seconds
-            setTimeout(async () => {
-                try {
-                    await message.delete();
-                    await successMsg.delete();
-                } catch (deleteError) {
-                    console.log('Could not delete rejection messages');
-                }
-            }, 10000);
-            
         } else {
-            const errorMsg = await message.reply(`❌ User not found: ${orderInfo.discordUsername}`);
+            await message.reply(`❌ User not found: ${orderInfo.discordUsername}`);
             pendingOrders.delete(orderId);
-            
-            // Schedule deletion
-            setTimeout(async () => {
-                try {
-                    await message.delete();
-                    await errorMsg.delete();
-                } catch (deleteError) {
-                    console.log('Could not delete error messages');
-                }
-            }, 10000);
         }
     } catch (error) {
         console.error('Rejection error:', error);
-        const errorMsg = await message.reply('❌ Error rejecting order.');
-        
-        setTimeout(async () => {
-            try {
-                await message.delete();
-                await errorMsg.delete();
-            } catch (deleteError) {
-                console.log('Could not delete error messages');
-            }
-        }, 10000);
+        await message.reply('❌ Error rejecting order.');
     }
 }
 
@@ -401,17 +350,7 @@ async function handleOrdersCommand(message) {
         .setColor(0xFFA500)
         .setFooter({ text: `Total: ${pendingOrders.size} orders - Use ./approved or ./rejected <order_id>` });
 
-    const ordersMsg = await message.reply({ embeds: [embed] });
-    
-    // Schedule deletion after 30 seconds (orders list needs more time to read)
-    setTimeout(async () => {
-        try {
-            await message.delete();
-            await ordersMsg.delete();
-        } catch (deleteError) {
-            console.log('Could not delete orders messages');
-        }
-    }, 30000);
+    await message.reply({ embeds: [embed] });
 }
 
 async function handleHelpCommand(message) {
@@ -419,26 +358,15 @@ async function handleHelpCommand(message) {
         .setTitle('🤖 Drk Order Bot Help')
         .setDescription('Available commands for administrators:')
         .addFields(
-            { name: './approved <order_id>', value: 'Approve an order and send DM to user', inline: false },
-            { name: './rejected <order_id>', value: 'Reject an order and send DM to user', inline: false },
+            { name: './approved <order_id>', value: 'Approve an order and send DM to user\n⚠️ Webhook notification will be deleted after 10 seconds', inline: false },
+            { name: './rejected <order_id>', value: 'Reject an order and send DM to user\n⚠️ Webhook notification will be deleted after 10 seconds', inline: false },
             { name: './orders', value: 'List all pending orders', inline: false },
-            { name: './ping', value: 'Check bot latency', inline: false },
-            { name: '📝 Note', value: 'Command messages auto-delete after 10 seconds', inline: false }
+            { name: './ping', value: 'Check bot latency', inline: false }
         )
         .setColor(0x0099FF)
         .setFooter({ text: 'Drk Survraze SMP - Order Management System' });
 
-    const helpMsg = await message.reply({ embeds: [helpEmbed] });
-    
-    // Schedule deletion after 30 seconds
-    setTimeout(async () => {
-        try {
-            await message.delete();
-            await helpMsg.delete();
-        } catch (deleteError) {
-            console.log('Could not delete help messages');
-        }
-    }, 30000);
+    await message.reply({ embeds: [helpEmbed] });
 }
 
 // ==================== ERROR HANDLING ====================
