@@ -16,7 +16,7 @@ const pendingOrders = new Map();
 const orderMessages = new Map();
 
 // Bot configuration - REPLACE WITH YOUR ACTUAL VALUES
-const BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';
+const DISCORD_TOKEN = 'YOUR_DISCORD_TOKEN_HERE';
 const ORDER_CHANNEL_ID = 'YOUR_ORDER_CHANNEL_ID_HERE';
 
 client.once('ready', () => {
@@ -377,7 +377,7 @@ process.on('unhandledRejection', (error) => {
 });
 
 // Start the bot
-client.login(BOT_TOKEN).catch(error => {
+client.login(TOKEN).catch(error => {
     console.error('❌ Failed to login:', error);
     process.exit(1);
 });
