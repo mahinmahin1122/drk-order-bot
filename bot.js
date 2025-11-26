@@ -84,6 +84,23 @@ async function processWebhookOrder(message) {
                 });
                 
                 console.log(`📦 New order stored: ${orderId} for ${discordUsername}`);
+                
+                // ✅ FIXED: New order notification send করবে
+                try {
+                    const notificationMsg = await message.channel.send(`📥 New order received: \`${orderId}\` for ${discordUsername}`);
+                    
+                    // Notification message কেও 30 second পর delete করবে
+                    setTimeout(async () => {
+                        try {
+                            await notificationMsg.delete();
+                        } catch (deleteError) {
+                            console.log('Could not delete notification message');
+                        }
+                    }, 30000);
+                    
+                } catch (notifyError) {
+                    console.log('Could not send notification message');
+                }
             }
         }
     } catch (error) {
@@ -179,13 +196,13 @@ async function handleApprovalCommand(message) {
                     components: []
                 });
 
-                // 🔥 10 SECOND পরে WEBHOOK NOTIFICATION DELETE করবে
+                // ✅ FIXED: 10 SECOND পরে WEBHOOK NOTIFICATION DELETE করবে
                 setTimeout(async () => {
                     try {
                         await originalMessage.delete();
                         console.log(`🗑️ Webhook notification deleted for order: ${orderId}`);
                     } catch (deleteError) {
-                        console.log('Could not delete webhook notification');
+                        console.log('❌ Could not delete webhook notification:', deleteError.message);
                     }
                 }, 10000);
 
@@ -194,7 +211,7 @@ async function handleApprovalCommand(message) {
             }
 
             // Bot এর message টি থাকবে (delete হবে না)
-            await message.reply(`✅ Order \`${orderId}\` approved! DM sent to ${orderInfo.discordUsername}`);
+            const successMsg = await message.reply(`✅ Order \`${orderId}\` approved! DM sent to ${orderInfo.discordUsername}`);
             
             // Remove from pending orders
             pendingOrders.delete(orderId);
@@ -266,13 +283,13 @@ async function handleRejectionCommand(message) {
                     components: []
                 });
 
-                // 🔥 10 SECOND পরে WEBHOOK NOTIFICATION DELETE করবে
+                // ✅ FIXED: 10 SECOND পরে WEBHOOK NOTIFICATION DELETE করবে
                 setTimeout(async () => {
                     try {
                         await originalMessage.delete();
                         console.log(`🗑️ Webhook notification deleted for order: ${orderId}`);
                     } catch (deleteError) {
-                        console.log('Could not delete webhook notification');
+                        console.log('❌ Could not delete webhook notification:', deleteError.message);
                     }
                 }, 10000);
 
