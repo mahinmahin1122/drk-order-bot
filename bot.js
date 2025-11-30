@@ -7,7 +7,7 @@ const CONFIG = {
     GUILD_ID: process.env.GUILD_ID || 'YOUR_SERVER_ID',
     ORDER_CHANNEL_ID: process.env.ORDER_CHANNEL_ID || 'ORDER_CHANNEL_ID',
     ALLOWED_COMMAND_CHANNEL_ID: process.env.ALLOWED_CHANNEL_ID || 'YOUR_ALLOWED_CHANNEL_ID',
-    ANNOUNCEMENT_CHANNEL_ID: '1444273009069129811', // ✅ নতুন অ্যানাউন্সমেন্ট চ্যানেল
+    ANNOUNCEMENT_CHANNEL_ID: '1444273009069129811',
     DISCORD_INVITE_LINK: 'https://discord.gg/SjefnHedt'
 };
 
@@ -122,17 +122,18 @@ async function processWebhookOrder(message) {
                     timestamp: new Date(),
                     originalEmbed: embed,
                     orderDetails: orderDetails,
-                    status: 'pending' // ✅ Order status track করা
+                    status: 'pending'
                 });
                 
                 console.log(`📦 New order stored: ${orderId} for ${discordUsername}`);
                 console.log(`📝 Webhook Message ID: ${message.id}`);
+                console.log(`📦 Order Details: ${orderDetails}`);
                 console.log(`⏰ Stored at: ${new Date().toLocaleString()}`);
                 
                 // ✅ New order notification send করবে allowed চ্যানেলে
                 try {
                     const allowedChannel = await client.channels.fetch(CONFIG.ALLOWED_COMMAND_CHANNEL_ID);
-                    await allowedChannel.send(`📥 New order received: \`${orderId}\` for ${discordUsername}\n⏰ Received at: ${new Date().toLocaleString()}`);
+                    await allowedChannel.send(`📥 New order received: \`${orderId}\` for ${discordUsername}\n📦 Product: ${orderDetails}\n⏰ Received at: ${new Date().toLocaleString()}`);
                     console.log(`📢 Notification sent to command channel for order: ${orderId}`);
                 } catch (notifyError) {
                     console.log('Could not send notification to command channel:', notifyError.message);
@@ -158,6 +159,13 @@ function extractOrderId(embed) {
             return field.value.replace(/[`]/g, '').trim();
         }
     }
+    
+    // ✅ Description থেকে Order ID খোঁজা
+    if (embed.description) {
+        const descMatch = embed.description.match(/(ORD_[\w]+)/);
+        if (descMatch) return descMatch[1];
+    }
+    
     return null;
 }
 
@@ -166,43 +174,167 @@ function extractDiscordUsername(embed) {
     
     for (let field of embed.fields) {
         if (field.name.includes('Discord') || field.name.includes('👤') || field.name.includes('Username')) {
-            return field.value.replace(/[`]/g, '').trim();
+            return field.value.replace(/[`*_~|]/g, '').trim();
         }
     }
     
     for (let field of embed.fields) {
         if (field.value && (field.value.includes('#') || field.value.toLowerCase().includes('discord'))) {
-            return field.value.replace(/[`]/g, '').trim();
+            return field.value.replace(/[`*_~|]/g, '').trim();
         }
+    }
+    
+    // ✅ Description থেকে Discord username খোঁজা
+    if (embed.description) {
+        const descMatch = embed.description.match(/Discord[\s:]*([^\\\n]+)/i);
+        if (descMatch) return descMatch[1].trim();
     }
     
     return null;
 }
 
 function extractOrderDetails(embed) {
-    if (!embed.fields) return 'No details available';
+    if (!embed.fields) {
+        // ✅ যদি fields না থাকে, description থেকে details extract করা
+        if (embed.description) {
+            return extractDetailsFromDescription(embed.description);
+        }
+        return 'No details available';
+    }
     
     let details = '';
+    
+    // ✅ Method 1: Product/Item/Token fields খোঁজা
     for (let field of embed.fields) {
-        if (field.name.includes('Product') || field.name.includes('Item') || field.name.includes('📦') || field.name.includes('Package')) {
-            details = field.value.replace(/[`]/g, '').trim();
-            break;
+        const fieldName = field.name.toLowerCase();
+        const fieldValue = field.value.replace(/[`*_~|]/g, '').trim();
+        
+        if (fieldName.includes('product') || 
+            fieldName.includes('item') || 
+            fieldName.includes('token') ||
+            fieldName.includes('package') ||
+            fieldName.includes('rank') ||
+            fieldName.includes('key') ||
+            fieldName.includes('purchase') ||
+            fieldName.includes('📦') ||
+            fieldName.includes('🛒') ||
+            fieldName.includes('🎁') ||
+            fieldName.includes('⭐')) {
+            
+            if (fieldValue && fieldValue !== 'N/A' && !fieldValue.includes('not specified')) {
+                details = fieldValue;
+                break;
+            }
         }
     }
     
-    // যদি Product field না পাওয়া যায়, তাহলে Description থেকে খোঁজা
+    // ✅ Method 2: Description থেকে details extract করা
     if (!details && embed.description) {
-        const descMatch = embed.description.match(/(Product|Item|Package):?\s*([^\n]+)/i);
-        if (descMatch) {
-            details = descMatch[2].trim();
+        details = extractDetailsFromDescription(embed.description);
+    }
+    
+    // ✅ Method 3: সব fields check করা
+    if (!details) {
+        for (let field of embed.fields) {
+            const fieldValue = field.value.replace(/[`*_~|]/g, '').trim();
+            if (fieldValue && 
+                !fieldValue.includes('ORD_') && 
+                !fieldValue.includes('@') && 
+                !fieldValue.includes('#') &&
+                !fieldValue.toLowerCase().includes('discord') &&
+                fieldValue.length > 5) {
+                details = fieldValue;
+                break;
+            }
         }
     }
     
     return details || 'Product details not specified';
 }
 
+function extractDetailsFromDescription(description) {
+    if (!description) return '';
+    
+    const lines = description.split('\n');
+    let details = '';
+    
+    for (let line of lines) {
+        const cleanLine = line.replace(/[`*_~|]/g, '').trim();
+        
+        // ✅ Token related
+        if (cleanLine.includes('Token') || cleanLine.includes('token')) {
+            const tokenMatch = cleanLine.match(/(\d+)\s*Token/i);
+            if (tokenMatch) {
+                details = `${tokenMatch[1]} Tokens`;
+                break;
+            }
+            details = cleanLine;
+            break;
+        }
+        
+        // ✅ Rank related
+        if (cleanLine.includes('Rank') || cleanLine.includes('rank') || cleanLine.includes('Elite')) {
+            const rankMatch = cleanLine.match(/(Elite|VIP|Premium|Standard)\s*Rank/i);
+            if (rankMatch) {
+                details = `${rankMatch[1]} Rank`;
+                break;
+            }
+            details = cleanLine;
+            break;
+        }
+        
+        // ✅ Key related
+        if (cleanLine.includes('Key') || cleanLine.includes('key')) {
+            const keyMatch = cleanLine.match(/(Shadow|Fallen)\s*Key/i);
+            if (keyMatch) {
+                details = `${keyMatch[1]} Key`;
+                break;
+            }
+            details = cleanLine;
+            break;
+        }
+        
+        // ✅ Item related
+        if (cleanLine.includes('Item') || cleanLine.includes('item')) {
+            const itemMatch = cleanLine.match(/Item\s*:\s*(.+)/i);
+            if (itemMatch) {
+                details = itemMatch[1].trim();
+                break;
+            }
+        }
+        
+        // ✅ In-game name এর পরে যা আছে সেটা
+        if (cleanLine.includes('In-game') || cleanLine.includes('Ingame')) {
+            const nextLine = lines[lines.indexOf(line) + 1];
+            if (nextLine && nextLine.includes('Item')) {
+                const itemMatch = nextLine.match(/Item\s*:\s*(.+)/i);
+                if (itemMatch) {
+                    details = itemMatch[1].trim();
+                    break;
+                }
+            }
+        }
+    }
+    
+    // ✅ যদি এখনও details না মেলে, প্রথম meaningful line নেওয়া
+    if (!details) {
+        for (let line of lines) {
+            const cleanLine = line.replace(/[`*_~|]/g, '').trim();
+            if (cleanLine && 
+                !cleanLine.includes('Order') && 
+                !cleanLine.includes('Discord') && 
+                !cleanLine.includes('@') &&
+                cleanLine.length > 10) {
+                details = cleanLine;
+                break;
+            }
+        }
+    }
+    
+    return details || '';
+}
+
 async function handleApprovalCommand(message) {
-    // ✅ Channel check already done above, so directly check permissions
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return message.reply(MESSAGES.NO_PERMISSION);
     }
@@ -223,7 +355,6 @@ async function handleApprovalCommand(message) {
         const user = await findUserByUsername(orderInfo.discordUsername);
         
         if (user) {
-            // ✅ REAL-TIME TIMESTAMP - DM পাঠানোর সময়ের টাইমস্ট্যাম্প
             const approvalTime = new Date();
             const bangladeshTime = formatBangladeshTime(approvalTime);
             
@@ -242,11 +373,10 @@ async function handleApprovalCommand(message) {
 
             await user.send({ embeds: [dmEmbed] });
             
-            // ✅ ANNOUNCEMENT CHANNEL এ মেসেজ পাঠানো - SIMPLE VERSION
+            // ✅ ANNOUNCEMENT CHANNEL এ মেসেজ পাঠানো
             try {
                 const announcementChannel = await client.channels.fetch(CONFIG.ANNOUNCEMENT_CHANNEL_ID);
                 
-                // @everyone সহ মেসেজ পাঠানো
                 const announcementMessage = await announcementChannel.send({
                     content: `@everyone\n🎉 **NEW ORDER APPROVED!**`,
                     embeds: [
@@ -290,6 +420,7 @@ async function handleApprovalCommand(message) {
             pendingOrders.delete(orderId);
             
             console.log(`✅ Order ${orderId} approved for ${orderInfo.discordUsername} at ${bangladeshTime}`);
+            console.log(`📦 Product: ${orderInfo.orderDetails}`);
             console.log(`⏰ Order was pending for: ${timeDiff(orderInfo.timestamp, approvalTime)}`);
             
         } else {
@@ -323,11 +454,9 @@ async function handleRejectionCommand(message) {
         const user = await findUserByUsername(orderInfo.discordUsername);
         
         if (user) {
-            // ✅ REAL-TIME TIMESTAMP - DM পাঠানোর সময়ের টাইমস্ট্যাম্প
             const rejectionTime = new Date();
             const bangladeshTime = formatBangladeshTime(rejectionTime);
             
-            // Send rejection DM to user with Discord link
             const dmEmbed = new EmbedBuilder()
                 .setTitle('❌ ORDER REJECTED')
                 .setDescription(MESSAGES.REJECTION_MESSAGE)
@@ -342,8 +471,6 @@ async function handleRejectionCommand(message) {
                 .setTimestamp(rejectionTime);
 
             await user.send({ embeds: [dmEmbed] });
-            
-            // ❌ REJECTED হলে ANNOUNCEMENT CHANNEL এ কিছু পাঠানো হবে না
             
             // ✅ Webhook notification delete করবে
             try {
@@ -365,10 +492,10 @@ async function handleRejectionCommand(message) {
 
             await message.reply(`❌ Order \`${orderId}\` rejected! DM sent to ${orderInfo.discordUsername}\n⏰ Order was pending since: ${orderInfo.timestamp.toLocaleString()}`);
             
-            // Remove from pending orders
             pendingOrders.delete(orderId);
             
             console.log(`❌ Order ${orderId} rejected for ${orderInfo.discordUsername} at ${bangladeshTime}`);
+            console.log(`📦 Product: ${orderInfo.orderDetails}`);
             console.log(`⏰ Order was pending for: ${timeDiff(orderInfo.timestamp, rejectionTime)}`);
             
         } else {
@@ -399,7 +526,6 @@ async function handleDismissCommand(message) {
     }
 
     try {
-        // ✅ Webhook notification delete করবে
         try {
             const channel = await client.channels.fetch(orderInfo.channelId);
             const webhookMessage = await channel.messages.fetch(orderInfo.webhookMessageId);
@@ -419,10 +545,10 @@ async function handleDismissCommand(message) {
 
         await message.reply(`🗑️ Order \`${orderId}\` dismissed! No DM sent to user.\n⏰ Order was pending since: ${orderInfo.timestamp.toLocaleString()}`);
         
-        // Remove from pending orders
         pendingOrders.delete(orderId);
         
         console.log(`🗑️ Order ${orderId} dismissed without notification`);
+        console.log(`📦 Product: ${orderInfo.orderDetails}`);
         console.log(`⏰ Order was pending for: ${timeDiff(orderInfo.timestamp, new Date())}`);
         
     } catch (error) {
@@ -431,7 +557,6 @@ async function handleDismissCommand(message) {
     }
 }
 
-// ✅ সময়ের পার্থক্য বের করার ফাংশন
 function timeDiff(start, end) {
     const diff = end.getTime() - start.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -443,7 +568,6 @@ function timeDiff(start, end) {
     return `${minutes} minutes`;
 }
 
-// ✅ বাংলাদেশের সময় ফরম্যাট করার ফাংশন
 function formatBangladeshTime(date) {
     return date.toLocaleString('en-BD', {
         timeZone: 'Asia/Dhaka',
@@ -500,7 +624,7 @@ async function handleOrdersCommand(message) {
     const ordersList = Array.from(pendingOrders.entries())
         .map(([orderId, info]) => {
             const pendingTime = timeDiff(info.timestamp, new Date());
-            return `• **${orderId}** - ${info.discordUsername}\n  ⏰ Pending for: ${pendingTime}\n  📦 Product: ${info.orderDetails}`;
+            return `• **${orderId}** - ${info.discordUsername}\n  📦 ${info.orderDetails}\n  ⏰ Pending for: ${pendingTime}`;
         })
         .join('\n\n');
 
